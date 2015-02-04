@@ -197,9 +197,19 @@ M.authenticate = function()
 		local vars = authResp.vars;
 
 		ngx.var.provider_id = vars.providerId;
-		ngx.var.service_id = vars.serviceId;
-		ngx.var.service_version = vars.serviceVersion;
-		ngx.var.operation_name = vars.operation;
+
+		if vars.serviceId ~= cjson.null then
+			ngx.var.service_id = vars.serviceId;
+		end
+
+		if vars.serviceVersion ~= cjson.null then
+			ngx.var.service_version = vars.serviceVersion;
+		end
+
+		if vars.operation ~= cjson.null then
+			ngx.var.operation_name = vars.operation;
+		end
+
 		ngx.var.token_id = nil;
 		ngx.var.user_id = nil;
 
@@ -220,29 +230,43 @@ M.authenticate = function()
 				end
 			end
 
+			if authResp.vars ~= nil and authResp.vars ~= cjson.null then
+				local error_response = cjson.encode({
+					code = authResp.code,
+					reason = authResp.reason,
+					message = authResp.message,
+					developerMessage = authResp.developerMessage,
+					errorCode = authResp.errorCode
+				});
+
+				ngx.print(error_response);
+			else
+				ngx.print(res.body);
+			end
+
 			return;
 		else
 			local apiContext = authResp.context;
 
 			ngx.var.reason = "ok";
 
-            if apiContext ~= nil then
-                ngx.var.application_id = (apiContext.application ~= cjson.null and apiContext.application.id or nil)
-                ngx.var.client_id = (apiContext.client ~= cjson.null and apiContext.client.id or nil)
+			if apiContext ~= nil then
+				ngx.var.application_id = (apiContext.application ~= cjson.null and apiContext.application.id or nil)
+				ngx.var.client_id = (apiContext.client ~= cjson.null and apiContext.client.id or nil)
 
-                if apiContext.token ~= cjson.null then
-                    if type(apiContext.token.id) == "string" then
-                        ngx.log(ngx.INFO, apiContext.token.id);
-                        ngx.var.token_id = apiContext.token.id;
-                    end
-                end
+				if apiContext.token ~= cjson.null then
+					if type(apiContext.token.id) == "string" then
+						ngx.log(ngx.INFO, apiContext.token.id);
+						ngx.var.token_id = apiContext.token.id;
+					end
+				end
 
-                if apiContext.principal ~= cjson.null then
-                    if type(apiContext.principal.id) == "string" then
-                        ngx.var.user_id = apiContext.principal.id;
-                    end
-                end
-            end
+				if apiContext.principal ~= cjson.null then
+					if type(apiContext.principal.id) == "string" then
+						ngx.var.user_id = apiContext.principal.id;
+					end
+				end
+			end
 		end
 	end
 
