@@ -70,6 +70,18 @@ local function empty_string_if_null(value)
 	end
 end
 
+local function empty_string_to_null(value)
+	if (value ~= nil and value == "") then
+		return cjson.null;
+	else
+		if (value == nil) then
+			return cjson.null;
+		else
+			return value;
+		end
+	end
+end
+
 local function new_line_delimited(table_value)
 	return table.concat(table_value, "\n") .. "\n";
 end
@@ -298,20 +310,20 @@ M.send_traffic = function()
 
 	local event_request = cjson.encode({
 		request_id = nil,
-		application_id = ngx.var.application_id,
-		client_id = ngx.var.client_id,
-		service_id = ngx.var.service_id,
-		service_version = ngx.var.service_version,
-		operation_name = ngx.var.operation_name,
-		provider_id = ngx.var.provider_id,
+		application_id = empty_string_to_null(ngx.var.application_id),
+		client_id = empty_string_to_null(ngx.var.client_id),
+		service_id = empty_string_to_null(ngx.var.service_id),
+		service_version = empty_string_to_null(ngx.var.service_version),
+		operation_name = empty_string_to_null(ngx.var.operation_name),
+		provider_id = empty_string_to_null(ngx.var.provider_id),
 		request_size = tonumber(ngx.var.bytes_received),
 		response_size = tonumber(ngx.var.bytes_sent),
 		response_time = response_time,
 		status_code = tonumber(ngx.var.status),
-		error_reason = ngx.var.reason,
+		error_reason = empty_string_to_null(ngx.var.reason),
 		cache_hit = false,
-		token_id = ngx.var.token_id,
-		user_id = ngx.var.user_id,
+		token_id = empty_string_to_null(ngx.var.token_id),
+		user_id = empty_string_to_null(ngx.var.user_id),
 		host = host,
 		path = path,
 		port = port,
