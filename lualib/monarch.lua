@@ -1,6 +1,17 @@
--- Monarch API authentication for Nginx and Lua
--- Copyright (C) 2015 Phil Kedy
--- License MIT
+-- Copyright (C) 2015 CapTech Ventures, Inc.
+-- (http://www.captechconsulting.com) All Rights Reserved.
+--
+-- Licensed under the Apache License, Version 2.0 (the "License");
+-- you may not use this file except in compliance with the License.
+-- You may obtain a copy of the License at
+--
+--  http://www.apache.org/licenses/LICENSE-2.0
+--
+-- Unless required by applicable law or agreed to in writing, software
+-- distributed under the License is distributed on an "AS IS" BASIS,
+-- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-- See the License for the specific language governing permissions and
+-- limitations under the License.
 
 local M = {
 	_VERSION = '0.1',
@@ -82,6 +93,11 @@ local function empty_string_to_null(value)
 	end
 end
 
+
+local function is_defined(value)
+	return (value ~= null or value == cjson.null);
+end
+
 local function new_line_delimited(table_value)
 	return table.concat(table_value, "\n") .. "\n";
 end
@@ -160,7 +176,8 @@ M.authenticate = function()
 		ipAddress = ngx.var.remote_addr,
 		payloadHashes = payload_hashes,
 		requestWeight = 1.0,
-		performAuthorization = true
+		performAuthorization = true,
+		useLoadBalancer = true
 	});
 
 	local ts = os.time();
@@ -174,7 +191,7 @@ M.authenticate = function()
 		nonce,
 		"POST",
 		"/service/v1/requests/authenticate",
-		"localhost",
+		"monarch_backend",
 		tostring(8000),
 		payload_hash,
 		""
@@ -210,16 +227,20 @@ M.authenticate = function()
 
 		ngx.var.provider_id = vars.providerId;
 
-		if vars.serviceId ~= cjson.null then
+		if type(vars.serviceId) == "string" then
 			ngx.var.service_id = vars.serviceId;
 		end
 
-		if vars.serviceVersion ~= cjson.null then
+		if type(vars.serviceVersion) == "string" then
 			ngx.var.service_version = vars.serviceVersion;
 		end
 
-		if vars.operation ~= cjson.null then
+		if type(vars.operation) == "string" then
 			ngx.var.operation_name = vars.operation;
+		end
+
+		if type(authResp.target) == "string" then
+			ngx.var.target = authResp.target
 		end
 
 		ngx.var.token_id = nil;
@@ -234,7 +255,7 @@ M.authenticate = function()
 			ngx.log(ngx.ERR, "Authentication failed");
 			ngx.header.content_type = res.header["Content-Type"];
 
-			if authResp.responseHeaders ~= nil then
+			if is_defined(authResp.responseHeaders) then
 				local headers = authResp.responseHeaders;
 
 				for i, hdr in ipairs(headers) do
@@ -242,7 +263,7 @@ M.authenticate = function()
 				end
 			end
 
-			if authResp.vars ~= nil and authResp.vars ~= cjson.null then
+			if is_defined(authResp.vars) then
 				local error_response = cjson.encode({
 					code = authResp.code,
 					reason = authResp.reason,
@@ -258,25 +279,34 @@ M.authenticate = function()
 
 			return;
 		else
-			local apiContext = authResp.context;
+			local claims = authResp.claims;
 
 			ngx.var.reason = "ok";
 
-			if apiContext ~= nil then
-				ngx.var.application_id = (apiContext.application ~= cjson.null and apiContext.application.id or nil)
-				ngx.var.client_id = (apiContext.client ~= cjson.null and apiContext.client.id or nil)
+			if is_defined(claims) then
+				local application = claims["http://monarchapis.com/claims/application"];
+				local client = claims["http://monarchapis.com/claims/client"];
+				local token = claims["http://monarchapis.com/claims/token"];
+				local principal = claims["http://monarchapis.com/claims/principal"];
 
-				if apiContext.token ~= cjson.null then
-					if type(apiContext.token.id) == "string" then
-						ngx.log(ngx.INFO, apiContext.token.id);
-						ngx.var.token_id = apiContext.token.id;
-					end
+				ngx.var.application_id = (is_defined(application) and application.id or nil)
+				ngx.var.client_id = (is_defined(client) and client.id or nil)
+
+				if is_defined(token) and type(token.id) == "string" then
+					ngx.log(ngx.INFO, token.id);
+					ngx.var.token_id = token.id;
 				end
 
-				if apiContext.principal ~= cjson.null then
-					if type(apiContext.principal.id) == "string" then
-						ngx.var.user_id = apiContext.principal.id;
-					end
+				if is_defined(principal) and type(principal.id) == "string" then
+					ngx.var.user_id = principal.id;
+				end
+			end
+
+			if is_defined(authResp.tokens) then
+				local tokens = authResp.tokens;
+
+				if is_defined(tokens.jwt) then
+					ngx.req.set_header("Authorization", "Bearer " .. tokens.jwt);
 				end
 			end
 		end
@@ -347,7 +377,7 @@ M.send_traffic = function()
 		nonce,
 		"POST",
 		"/analytics/v1/traffic/events",
-		"localhost",
+		"monarch_backend",
 		tostring(8000),
 		payload_hash,
 		""
