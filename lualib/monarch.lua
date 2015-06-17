@@ -293,7 +293,6 @@ M.authenticate = function()
 				ngx.var.client_id = (is_defined(client) and client.id or nil)
 
 				if is_defined(token) and type(token.id) == "string" then
-					ngx.log(ngx.INFO, token.id);
 					ngx.var.token_id = token.id;
 				end
 
@@ -402,3 +401,4 @@ M.send_traffic = function()
 end
 
 return M;
+
